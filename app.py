@@ -1791,3 +1791,7 @@ Teslim Eden (İmza)                       Teslim Alan (İmza)
             )
         except Exception as e:
             messagebox.showerror("Hata", f"Form oluşturulamadı: {e}")
+import streamlit as st
+
+st.title("Sistem ve Parça Takip Uygulaması")
+st.write("Uygulama başarıyla çalışıyor!")
