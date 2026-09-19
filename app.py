@@ -1795,5 +1795,4 @@ Teslim Eden (İmza)                       Teslim Alan (İmza)
 
 if __name__ == "__main__":
     
-    app = SistemTakipApp(root)
     
