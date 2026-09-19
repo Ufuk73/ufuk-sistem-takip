@@ -1791,8 +1791,3 @@ Teslim Eden (İmza)                       Teslim Alan (İmza)
             )
         except Exception as e:
             messagebox.showerror("Hata", f"Form oluşturulamadı: {e}")
-
-
-if __name__ == "__main__":
-    
-    
