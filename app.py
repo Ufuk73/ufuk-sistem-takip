@@ -1794,6 +1794,6 @@ Teslim Eden (İmza)                       Teslim Alan (İmza)
 
 
 if __name__ == "__main__":
-    root = tk.Tk()
+    
     app = SistemTakipApp(root)
-    root.mainloop()
+    
