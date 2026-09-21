@@ -31,10 +31,12 @@ try:
             .upper()
         )
 
-    # --- VERİTABANI BAŞLATMA ---
+    # --- VERİTABANI BAŞLATMA VE GÜNCELLEME (MIGRATION) ---
     def veritabanini_hazirla():
         conn = sqlite3.connect(DB_DOSYASI)
         cursor = conn.cursor()
+        
+        # 1. Tabloları oluştur (Yoksa)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS parcalar (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -66,6 +68,13 @@ try:
                 detay TEXT
             )
         """)
+        
+        # 2. Eski veritabanlarında 'bolge' sütunu eksikse otomatik ekle
+        cursor.execute("PRAGMA table_info(parcalar)")
+        kolonlar = [kol[1] for kol in cursor.fetchall()]
+        if "bolge" not in kolonlar:
+            cursor.execute("ALTER TABLE parcalar ADD COLUMN bolge TEXT")
+            
         conn.commit()
         conn.close()
 
@@ -181,16 +190,19 @@ try:
             if secili_id:
                 kayit = df_parcalar[df_parcalar["id"] == secili_id].iloc[0]
                 with st.form("guncelle_form"):
-                    g_bolge = st.text_input("Bölge", value=kayit["bolge"])
-                    g_sistem = st.text_input("Sistem Adı", value=kayit["sistem_adi"])
-                    g_s_pn = st.text_input("Sistem PN", value=kayit["sistem_pn"])
-                    g_s_sn = st.text_input("Sistem SN", value=kayit["sistem_sn"])
-                    g_parca = st.text_input("Parça Adı", value=kayit["parca_adi"])
-                    g_p_pn = st.text_input("Parça PN", value=kayit["parca_pn"])
-                    g_p_sn = st.text_input("Parça SN", value=kayit["parca_sn"])
-                    g_durum = st.selectbox("Durum", ["FAAL", "YEDEK PARÇA", "ONARIMDA", "GAYRI FAAL"], index=["FAAL", "YEDEK PARÇA", "ONARIMDA", "GAYRI FAAL"].index(kayit["durum"]) if kayit["durum"] in ["FAAL", "YEDEK PARÇA", "ONARIMDA", "GAYRI FAAL"] else 0)
-                    g_tarih = st.text_input("Onarım Tarihi (GG.AA.YYYY)", value=kayit["onarim_tarih"] if kayit["onarim_tarih"] else "")
-                    g_aciklama = st.text_area("Açıklama / Not", value=kayit["aciklama"] if kayit["aciklama"] else "")
+                    g_bolge = st.text_input("Bölge", value=kayit["bolge"] if pd.notna(kayit["bolge"]) else "")
+                    g_sistem = st.text_input("Sistem Adı", value=kayit["sistem_adi"] if pd.notna(kayit["sistem_adi"]) else "")
+                    g_s_pn = st.text_input("Sistem PN", value=kayit["sistem_pn"] if pd.notna(kayit["sistem_pn"]) else "")
+                    g_s_sn = st.text_input("Sistem SN", value=kayit["sistem_sn"] if pd.notna(kayit["sistem_sn"]) else "")
+                    g_parca = st.text_input("Parça Adı", value=kayit["parca_adi"] if pd.notna(kayit["parca_adi"]) else "")
+                    g_p_pn = st.text_input("Parça PN", value=kayit["parca_pn"] if pd.notna(kayit["parca_pn"]) else "")
+                    g_p_sn = st.text_input("Parça SN", value=kayit["parca_sn"] if pd.notna(kayit["parca_sn"]) else "")
+                    
+                    mevcut_durum = kayit["durum"] if pd.notna(kayit["durum"]) and kayit["durum"] in ["FAAL", "YEDEK PARÇA", "ONARIMDA", "GAYRI FAAL"] else "FAAL"
+                    g_durum = st.selectbox("Durum", ["FAAL", "YEDEK PARÇA", "ONARIMDA", "GAYRI FAAL"], index=["FAAL", "YEDEK PARÇA", "ONARIMDA", "GAYRI FAAL"].index(mevcut_durum))
+                    
+                    g_tarih = st.text_input("Onarım Tarihi (GG.AA.YYYY)", value=kayit["onarim_tarih"] if pd.notna(kayit["onarim_tarih"]) else "")
+                    g_aciklama = st.text_area("Açıklama / Not", value=kayit["aciklama"] if pd.notna(kayit["aciklama"]) else "")
                     
                     col_btn1, col_btn2 = st.columns(2)
                     guncelle_basildi = col_btn1.form_submit_button("Değişiklikleri Kaydet")
