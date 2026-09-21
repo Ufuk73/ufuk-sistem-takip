@@ -31,25 +31,15 @@ try:
             .upper()
         )
 
-    # --- VERİTABANI BAŞLATMA VE GÜNCELLEME (MIGRATION) ---
+    # --- VERİTABANI BAŞLATMA VE GELİŞMİŞ GÜNCELLEME (MIGRATION) ---
     def veritabanini_hazirla():
         conn = sqlite3.connect(DB_DOSYASI)
         cursor = conn.cursor()
         
-        # 1. Tabloları oluştur (Yoksa)
+        # 1. Tablolar yoksa temel yapıyla oluştur
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS parcalar (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                bolge TEXT,
-                sistem_adi TEXT,
-                sistem_pn TEXT,
-                sistem_sn TEXT,
-                parca_adi TEXT,
-                parca_pn TEXT,
-                parca_sn TEXT,
-                durum TEXT,
-                onarim_tarih TEXT,
-                aciklama TEXT
+                id INTEGER PRIMARY KEY AUTOINCREMENT
             )
         """)
         cursor.execute("""
@@ -69,11 +59,26 @@ try:
             )
         """)
         
-        # 2. Eski veritabanlarında 'bolge' sütunu eksikse otomatik ekle
+        # 2. 'parcalar' tablosunda olması gereken tüm sütunları tek tek kontrol et, yoksa ekle
+        beklenen_kolonlar = {
+            "bolge": "TEXT",
+            "sistem_adi": "TEXT",
+            "sistem_pn": "TEXT",
+            "sistem_sn": "TEXT",
+            "parca_adi": "TEXT",
+            "parca_pn": "TEXT",
+            "parca_sn": "TEXT",
+            "durum": "TEXT",
+            "onarim_tarih": "TEXT",
+            "aciklama": "TEXT"
+        }
+        
         cursor.execute("PRAGMA table_info(parcalar)")
-        kolonlar = [kol[1] for kol in cursor.fetchall()]
-        if "bolge" not in kolonlar:
-            cursor.execute("ALTER TABLE parcalar ADD COLUMN bolge TEXT")
+        mevcut_kolonlar = [kol[1] for kol in cursor.fetchall()]
+        
+        for kolon_adi, kolon_tipi in beklenen_kolonlar.items():
+            if kolon_adi not in mevcut_kolonlar:
+                cursor.execute(f"ALTER TABLE parcalar ADD COLUMN {kolon_adi} {kolon_tipi}")
             
         conn.commit()
         conn.close()
@@ -101,14 +106,14 @@ try:
 
     # İstatistik Hesaplama
     toplam = len(df_parcalar)
-    faal = len(df_parcalar[df_parcalar["durum"] == "FAAL"]) if not df_parcalar.empty else 0
-    yedek = len(df_parcalar[df_parcalar["durum"] == "YEDEK PARÇA"]) if not df_parcalar.empty else 0
-    onarimda = len(df_parcalar[df_parcalar["durum"] == "ONARIMDA"]) if not df_parcalar.empty else 0
-    gayri = len(df_parcalar[df_parcalar["durum"] == "GAYRI FAAL"]) if not df_parcalar.empty else 0
+    faal = len(df_parcalar[df_parcalar["durum"] == "FAAL"]) if not df_parcalar.empty and "durum" in df_parcalar.columns else 0
+    yedek = len(df_parcalar[df_parcalar["durum"] == "YEDEK PARÇA"]) if not df_parcalar.empty and "durum" in df_parcalar.columns else 0
+    onarimda = len(df_parcalar[df_parcalar["durum"] == "ONARIMDA"]) if not df_parcalar.empty and "durum" in df_parcalar.columns else 0
+    gayri = len(df_parcalar[df_parcalar["durum"] == "GAYRI FAAL"]) if not df_parcalar.empty and "durum" in df_parcalar.columns else 0
 
     # Kritik onarım hesaplama (30 gün+)
     kritik = 0
-    if not df_parcalar.empty and "onarim_tarih" in df_parcalar.columns:
+    if not df_parcalar.empty and "onarim_tarih" in df_parcalar.columns and "durum" in df_parcalar.columns:
         bugun = datetime.date.today()
         for _, row in df_parcalar[df_parcalar["durum"] == "ONARIMDA"].iterrows():
             o_tarih = row["onarim_tarih"]
@@ -147,8 +152,8 @@ try:
         if not df_parcalar.empty:
             col_f1, col_f2, col_f3, col_f4 = st.columns(4)
             
-            bolgeler = ["TÜMÜ"] + list(df_parcalar["bolge"].dropna().unique())
-            parcalar = ["TÜMÜ"] + list(df_parcalar["parca_adi"].dropna().unique())
+            bolgeler = ["TÜMÜ"] + list(df_parcalar["bolge"].dropna().unique()) if "bolge" in df_parcalar.columns else ["TÜMÜ"]
+            parcalar = ["TÜMÜ"] + list(df_parcalar["parca_adi"].dropna().unique()) if "parca_adi" in df_parcalar.columns else ["TÜMÜ"]
             durumlar = ["TÜMÜ", "FAAL", "YEDEK PARÇA", "ONARIMDA", "GAYRI FAAL", "30 GÜN+ KRİTİK"]
             
             f_bolge = col_f1.selectbox("Bölge Seç", bolgeler)
@@ -158,13 +163,13 @@ try:
             
             # Filtreleme Uygula
             filt_df = df_parcalar.copy()
-            if f_bolge != "TÜMÜ":
+            if f_bolge != "TÜMÜ" and "bolge" in filt_df.columns:
                 filt_df = filt_df[filt_df["bolge"] == f_bolge]
-            if f_parca != "TÜMÜ":
+            if f_parca != "TÜMÜ" and "parca_adi" in filt_df.columns:
                 filt_df = filt_df[filt_df["parca_adi"] == f_parca]
-            if f_durum != "TÜMÜ" and f_durum != "30 GÜN+ KRİTİK":
+            if f_durum != "TÜMÜ" and f_durum != "30 GÜN+ KRİTİK" and "durum" in filt_df.columns:
                 filt_df = filt_df[filt_df["durum"] == f_durum]
-            elif f_durum == "30 GÜN+ KRİTİK":
+            elif f_durum == "30 GÜN+ KRİTİK" and "durum" in filt_df.columns and "onarim_tarih" in filt_df.columns:
                 kritik_idler = []
                 bugun = datetime.date.today()
                 for _, r in filt_df[filt_df["durum"] == "ONARIMDA"].iterrows():
@@ -190,19 +195,21 @@ try:
             if secili_id:
                 kayit = df_parcalar[df_parcalar["id"] == secili_id].iloc[0]
                 with st.form("guncelle_form"):
-                    g_bolge = st.text_input("Bölge", value=kayit["bolge"] if pd.notna(kayit["bolge"]) else "")
-                    g_sistem = st.text_input("Sistem Adı", value=kayit["sistem_adi"] if pd.notna(kayit["sistem_adi"]) else "")
-                    g_s_pn = st.text_input("Sistem PN", value=kayit["sistem_pn"] if pd.notna(kayit["sistem_pn"]) else "")
-                    g_s_sn = st.text_input("Sistem SN", value=kayit["sistem_sn"] if pd.notna(kayit["sistem_sn"]) else "")
-                    g_parca = st.text_input("Parça Adı", value=kayit["parca_adi"] if pd.notna(kayit["parca_adi"]) else "")
-                    g_p_pn = st.text_input("Parça PN", value=kayit["parca_pn"] if pd.notna(kayit["parca_pn"]) else "")
-                    g_p_sn = st.text_input("Parça SN", value=kayit["parca_sn"] if pd.notna(kayit["parca_sn"]) else "")
+                    g_bolge = st.text_input("Bölge", value=kayit.get("bolge", "") if pd.notna(kayit.get("bolge", "")) else "")
+                    g_sistem = st.text_input("Sistem Adı", value=kayit.get("sistem_adi", "") if pd.notna(kayit.get("sistem_adi", "")) else "")
+                    g_s_pn = st.text_input("Sistem PN", value=kayit.get("sistem_pn", "") if pd.notna(kayit.get("sistem_pn", "")) else "")
+                    g_s_sn = st.text_input("Sistem SN", value=kayit.get("sistem_sn", "") if pd.notna(kayit.get("sistem_sn", "")) else "")
+                    g_parca = st.text_input("Parça Adı", value=kayit.get("parca_adi", "") if pd.notna(kayit.get("parca_adi", "")) else "")
+                    g_p_pn = st.text_input("Parça PN", value=kayit.get("parca_pn", "") if pd.notna(kayit.get("parca_pn", "")) else "")
+                    g_p_sn = st.text_input("Parça SN", value=kayit.get("parca_sn", "") if pd.notna(kayit.get("parca_sn", "")) else "")
                     
-                    mevcut_durum = kayit["durum"] if pd.notna(kayit["durum"]) and kayit["durum"] in ["FAAL", "YEDEK PARÇA", "ONARIMDA", "GAYRI FAAL"] else "FAAL"
+                    mevcut_durum = kayit.get("durum", "FAAL")
+                    if pd.isna(mevcut_durum) or mevcut_durum not in ["FAAL", "YEDEK PARÇA", "ONARIMDA", "GAYRI FAAL"]:
+                        mevcut_durum = "FAAL"
                     g_durum = st.selectbox("Durum", ["FAAL", "YEDEK PARÇA", "ONARIMDA", "GAYRI FAAL"], index=["FAAL", "YEDEK PARÇA", "ONARIMDA", "GAYRI FAAL"].index(mevcut_durum))
                     
-                    g_tarih = st.text_input("Onarım Tarihi (GG.AA.YYYY)", value=kayit["onarim_tarih"] if pd.notna(kayit["onarim_tarih"]) else "")
-                    g_aciklama = st.text_area("Açıklama / Not", value=kayit["aciklama"] if pd.notna(kayit["aciklama"]) else "")
+                    g_tarih = st.text_input("Onarım Tarihi (GG.AA.YYYY)", value=kayit.get("onarim_tarih", "") if pd.notna(kayit.get("onarim_tarih", "")) else "")
+                    g_aciklama = st.text_area("Açıklama / Not", value=kayit.get("aciklama", "") if pd.notna(kayit.get("aciklama", "")) else "")
                     
                     col_btn1, col_btn2 = st.columns(2)
                     guncelle_basildi = col_btn1.form_submit_button("Değişiklikleri Kaydet")
