@@ -9,9 +9,11 @@ st.set_page_config(
     page_title="Sistem ve Parça Takip Sistemi", page_icon="⚙️", layout="wide"
 )
 
-# --- BURAYI KENDİ BİLGİLERİNİZLE DOLDURUN ---
-WEB_APP_URL = "BURAYA_GOOGLE_APPS_SCRIPT_WEB_APP_URL_YAZIN"
-TABLO_ID = "TABLO_ID_BURAYA"  # Örn: 1BxiMVs0XRA5nFM...
+# --- BİLGİLERİNİZ ---
+WEB_APP_URL = (
+    "https://script.google.com/macros/s/AKfycbwkAFKQMtTwAeFhIIC1EiiKnqn9KQ0Lyfv4afdhYPsWk9x9M_n7AwuYbLAAjzzukv7N/exec"
+)
+TABLO_ID = "TABLO_ID_BURAYA"  # E-tablo linkindeki /d/ ile /edit arasındaki uzun yazıyı buraya yazın
 SHEET_CSV_URL = (
     f"https://docs.google.com/spreadsheets/d/{TABLO_ID}/gviz/tq?tqx=out:csv&sheet=parcalar"
 )
@@ -196,7 +198,6 @@ with tab_ekle:
         try:
           response = requests.post(WEB_APP_URL, json=yeni_veri)
           if response.status_code == 200:
-            # Başarılı bildirim ve 2.5 saniye sonra otomatik kaybolma
             st.toast("✅ Kayıt başarıyla tamamlandı!", icon="🎉")
             msg = st.success(
                 "✅ Yeni kayıt başarıyla eklendi! Sayfa yenileniyor..."
