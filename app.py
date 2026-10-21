@@ -34,11 +34,14 @@ def tr_upper(text):
   )
 
 
-# Verileri Google Sheets'ten Okuma
+# Verileri Google Sheets'ten Okuma (Büyük/Küçük Harf Duyarsız)
 @st.cache_data(ttl=0)
 def verileri_getir():
   try:
-    return pd.read_csv(SHEET_CSV_URL)
+    df = pd.read_csv(SHEET_CSV_URL)
+    # Sütun isimlerini otomatik küçük harfe çeviriyoruz ki hata çıkmasın
+    df.columns = [str(col).strip().lower() for col in df.columns]
+    return df
   except Exception:
     return pd.DataFrame(columns=[
         "id",
@@ -59,6 +62,11 @@ df_parcalar = verileri_getir()
 
 st.title("⚙️ Sistem ve Parça Takip Sistemi")
 
+# Güvenli Durum Kontrolü
+if not df_parcalar.empty and "durum" in df_parcalar.columns:
+  # Durum sütunundaki metinleri de büyük harfe sabitleyelim
+  df_parcalar["durum"] = df_parcalar["durum"].astype(str).str.upper()
+
 # Metrik İstatistikleri
 toplam = len(df_parcalar)
 faal = (
@@ -77,7 +85,13 @@ onarimda = (
     else 0
 )
 ankara = (
-    len(df_parcalar[df_parcalar["durum"] == "ANKARA'DA / SEVK EDİLDİ"])
+    len(
+        df_parcalar[
+            df_parcalar["durum"].str.contains(
+                "ANKARA", na=False, case=False
+            )
+        ]
+    )
     if not df_parcalar.empty and "durum" in df_parcalar.columns
     else 0
 )
@@ -130,7 +144,7 @@ with tab_ankara:
   st.subheader("🏛️ Ankara'ya Sevk Edilen Parçalar")
   if not df_parcalar.empty and "durum" in df_parcalar.columns:
     df_ankara = df_parcalar[
-        df_parcalar["durum"] == "ANKARA'DA / SEVK EDİLDİ"
+        df_parcalar["durum"].str.contains("ANKARA", na=False, case=False)
     ]
     if not df_ankara.empty:
       st.dataframe(df_ankara, use_container_width=True, hide_index=True)
@@ -227,4 +241,6 @@ with tab_yonetim:
             f"sistem_takip_{datetime.date.today().strftime('%d_%m_%Y')}.xlsx"
         ),
         mime=(
-            "application/vnd.
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        ),
+    )
