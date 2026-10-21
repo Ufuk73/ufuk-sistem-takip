@@ -65,7 +65,7 @@ st.title("⚙️ Sistem ve Parça Takip Sistemi")
 if not df_parcalar.empty and "durum" in df_parcalar.columns:
   df_parcalar["durum"] = df_parcalar["durum"].astype(str).str.upper()
 
-# Metrik İstatistikleri
+# Temel Metrik İstatistikleri
 toplam = len(df_parcalar)
 faal = (
     len(df_parcalar[df_parcalar["durum"] == "FAAL"])
@@ -82,18 +82,6 @@ onarimda = (
     if not df_parcalar.empty and "durum" in df_parcalar.columns
     else 0
 )
-# Ankara veya Sevk içerenleri ortak sayıyoruz
-ankara_sevk = (
-    len(
-        df_parcalar[
-            df_parcalar["durum"].str.contains(
-                "ANKARA|SEVK", na=False, case=False
-            )
-        ]
-    )
-    if not df_parcalar.empty and "durum" in df_parcalar.columns
-    else 0
-)
 gayri = (
     len(df_parcalar[df_parcalar["durum"] == "GAYRI FAAL"])
     if not df_parcalar.empty and "durum" in df_parcalar.columns
@@ -101,20 +89,18 @@ gayri = (
 )
 
 # Üst Metrik Kartları
-col1, col2, col3, col4, col5, col6 = st.columns(6)
+col1, col2, col3, col4, col5 = st.columns(5)
 col1.metric("Toplam", toplam)
 col2.metric("Faal", faal)
 col3.metric("Yedek", yedek)
 col4.metric("Onarımda", onarimda)
-col5.metric("🚚 Sevk / Ankara", ankara_sevk)
-col6.metric("Gayri Faal", gayri)
+col5.metric("Gayri Faal", gayri)
 
 st.markdown("---")
 
-# Sekmeler
-tab_takip, tab_ankara, tab_ekle, tab_yonetim = st.tabs([
+# Net ve Sade Sekmeler (Ankara kargaşası kaldırıldı)
+tab_takip, tab_ekle, tab_yonetim = st.tabs([
     "📋 Tüm Liste & Arama",
-    "🚚 Sevk Edilenler & Ankara",
     "➕ Yeni Kayıt Ekle",
     "⚙️ Dışa Aktar",
 ])
@@ -138,21 +124,7 @@ with tab_takip:
   else:
     st.info("Henüz kayıt bulunmuyor.")
 
-# 2. SEVK / ANKARA TAKİP SEKMESİ
-with tab_ankara:
-  st.subheader("🚚 Sevk Edilen / Ankara'daki Parçalar")
-  if not df_parcalar.empty and "durum" in df_parcalar.columns:
-    df_ankara = df_parcalar[
-        df_parcalar["durum"].str.contains("ANKARA|SEVK", na=False, case=False)
-    ]
-    if not df_ankara.empty:
-      st.dataframe(df_ankara, use_container_width=True, hide_index=True)
-    else:
-      st.success("Şu anda sevk edilmiş veya Ankara'da bulunan parça yok.")
-  else:
-    st.info("Henüz kayıt bulunmuyor.")
-
-# 3. YENİ KAYIT EKLEME SEKMESİ
+# 2. YENİ KAYIT EKLEME SEKMESİ
 with tab_ekle:
   st.subheader("Yeni Sistem / Parça Kaydı Ekle")
   with st.form("yeni_kayit_formu", clear_on_submit=True):
@@ -164,23 +136,16 @@ with tab_ekle:
     e_p_pn = st.text_input("Parça PN")
     e_p_sn = st.text_input("Parça SN")
 
-    # Durum seçeneklerine ikonlu SEVK seçeneği eklendi
-    e_durum = st.selectbox("Durum", [
-        "FAAL",
-        "YEDEK PARÇA",
-        "ONARIMDA",
-        "SEVK 🚚",
-        "ANKARA'DA / SEVK EDİLDİ",
-        "GAYRI FAAL",
-    ])
+    # Standart ve temiz durum seçenekleri
+    e_durum = st.selectbox(
+        "Durum", ["FAAL", "YEDEK PARÇA", "ONARIMDA", "GAYRI FAAL"]
+    )
 
     e_tarih = st.text_input(
-        "Sevk / Onarım Başlangıç Tarihi (GG.AA.YYYY)",
+        "Onarım / İşlem Tarihi (GG.AA.YYYY)",
         value=datetime.datetime.now().strftime("%d.%m.%Y"),
     )
-    e_aciklama = st.text_area(
-        "Açıklama (Örn: Kargo takip no, arıza detayları vb.)"
-    )
+    e_aciklama = st.text_area("Açıklama / Notlar")
 
     submit_yeni = st.form_submit_button("Sisteme Kaydet")
 
@@ -217,7 +182,7 @@ with tab_ekle:
             msg = st.success(
                 "✅ Yeni kayıt başarıyla eklendi! Sayfa yenileniyor..."
             )
-            time.sleep(2.5)
+            time.sleep(2.0)
             msg.empty()
             verileri_getir.clear()
             st.rerun()
@@ -226,7 +191,7 @@ with tab_ekle:
         except Exception as ex:
           st.error(f"Bağlantı hatası: {ex}")
 
-# 4. EXCEL DIŞA AKTAR SEKMESİ
+# 3. EXCEL DIŞA AKTAR SEKMESİ
 with tab_yonetim:
   st.subheader("Veri Yönetimi")
   if not df_parcalar.empty:
