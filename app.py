@@ -85,7 +85,7 @@ gayri = (
     else 0
 )
 
-# Metrik Kartları
+# Üst Metrik Kartları
 col1, col2, col3, col4, col5, col6 = st.columns(6)
 col1.metric("Toplam", toplam)
 col2.metric("Faal", faal)
@@ -96,6 +96,7 @@ col6.metric("Gayri Faal", gayri)
 
 st.markdown("---")
 
+# Sekmeler
 tab_takip, tab_ankara, tab_ekle, tab_yonetim = st.tabs([
     "📋 Tüm Liste & Arama",
     "🏛️ Ankara'daki Parçalar",
@@ -103,7 +104,7 @@ tab_takip, tab_ankara, tab_ekle, tab_yonetim = st.tabs([
     "⚙️ Dışa Aktar",
 ])
 
-# 1. TÜM LİSTE SEKME
+# 1. TÜM LİSTE & ARAMA SEKMESİ
 with tab_takip:
   st.subheader("Sistem ve Parça Listesi")
   if not df_parcalar.empty:
@@ -136,7 +137,7 @@ with tab_ankara:
   else:
     st.info("Henüz kayıt bulunmuyor.")
 
-# 3. YENİ KAYIT EKLEME SEKME
+# 3. YENİ KAYIT EKLEME SEKMESİ
 with tab_ekle:
   st.subheader("Yeni Sistem / Parça Kaydı Ekle")
   with st.form("yeni_kayit_formu", clear_on_submit=True):
@@ -148,7 +149,6 @@ with tab_ekle:
     e_p_pn = st.text_input("Parça PN")
     e_p_sn = st.text_input("Parça SN")
 
-    # Durum seçeneklerine Ankara seçeneği eklendi
     e_durum = st.selectbox("Durum", [
         "FAAL",
         "YEDEK PARÇA",
@@ -196,21 +196,21 @@ with tab_ekle:
         try:
           response = requests.post(WEB_APP_URL, json=yeni_veri)
           if response.status_code == 200:
-            # Geçici bildirim (Toast) ve 2.5 saniye sonra kaybolan başarı mesajı
+            # Başarılı bildirim ve 2.5 saniye sonra otomatik kaybolma
             st.toast("✅ Kayıt başarıyla tamamlandı!", icon="🎉")
             msg = st.success(
                 "✅ Yeni kayıt başarıyla eklendi! Sayfa yenileniyor..."
             )
-            time.sleep(2.5)  # 2.5 saniye beklet
-            msg.empty()  # Mesajı ekrandan kaldır
-            verileri_getir.clear()  # Önbelleği temizle
-            st.rerun()  # Sayfayı yenile
+            time.sleep(2.5)
+            msg.empty()
+            verileri_getir.clear()
+            st.rerun()
           else:
             st.error(f"Kayıt eklenemedi. Sunucu yanıtı: {response.status_code}")
         except Exception as ex:
           st.error(f"Bağlantı hatası: {ex}")
 
-# 4. EXCEL DIŞA AKTAR SEKME
+# 4. EXCEL DIŞA AKTAR SEKMESİ
 with tab_yonetim:
   st.subheader("Veri Yönetimi")
   if not df_parcalar.empty:
