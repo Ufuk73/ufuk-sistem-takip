@@ -13,7 +13,7 @@ st.set_page_config(
 WEB_APP_URL = (
     "https://script.google.com/macros/s/AKfycbwkAFKQMtTwAeFhIIC1EiiKnqn9KQ0Lyfv4afdhYPsWk9x9M_n7AwuYbLAAjzzukv7N/exec"
 )
-TABLO_ID = "TABLO_ID_BURAYA"  # E-tablo linkindeki /d/ ile /edit arasındaki uzun yazıyı buraya yazın
+TABLO_ID = "1wNhPt64CzcO9ddsVv1wfxMVMurSfymV2ZI36lhbYk0o"
 SHEET_CSV_URL = (
     f"https://docs.google.com/spreadsheets/d/{TABLO_ID}/gviz/tq?tqx=out:csv&sheet=parcalar"
 )
@@ -227,6 +227,4 @@ with tab_yonetim:
             f"sistem_takip_{datetime.date.today().strftime('%d_%m_%Y')}.xlsx"
         ),
         mime=(
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        ),
-    )
+            "application/vnd.
