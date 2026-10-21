@@ -34,12 +34,11 @@ def tr_upper(text):
   )
 
 
-# Verileri Google Sheets'ten Okuma (Büyük/Küçük Harf Duyarsız)
+# Verileri Google Sheets'ten Okuma
 @st.cache_data(ttl=0)
 def verileri_getir():
   try:
     df = pd.read_csv(SHEET_CSV_URL)
-    # Sütun isimlerini otomatik küçük harfe çeviriyoruz ki hata çıkmasın
     df.columns = [str(col).strip().lower() for col in df.columns]
     return df
   except Exception:
@@ -64,7 +63,6 @@ st.title("⚙️ Sistem ve Parça Takip Sistemi")
 
 # Güvenli Durum Kontrolü
 if not df_parcalar.empty and "durum" in df_parcalar.columns:
-  # Durum sütunundaki metinleri de büyük harfe sabitleyelim
   df_parcalar["durum"] = df_parcalar["durum"].astype(str).str.upper()
 
 # Metrik İstatistikleri
@@ -84,11 +82,12 @@ onarimda = (
     if not df_parcalar.empty and "durum" in df_parcalar.columns
     else 0
 )
-ankara = (
+# Ankara veya Sevk içerenleri ortak sayıyoruz
+ankara_sevk = (
     len(
         df_parcalar[
             df_parcalar["durum"].str.contains(
-                "ANKARA", na=False, case=False
+                "ANKARA|SEVK", na=False, case=False
             )
         ]
     )
@@ -107,7 +106,7 @@ col1.metric("Toplam", toplam)
 col2.metric("Faal", faal)
 col3.metric("Yedek", yedek)
 col4.metric("Onarımda", onarimda)
-col5.metric("🏛️ Ankara'da", ankara)
+col5.metric("🚚 Sevk / Ankara", ankara_sevk)
 col6.metric("Gayri Faal", gayri)
 
 st.markdown("---")
@@ -115,7 +114,7 @@ st.markdown("---")
 # Sekmeler
 tab_takip, tab_ankara, tab_ekle, tab_yonetim = st.tabs([
     "📋 Tüm Liste & Arama",
-    "🏛️ Ankara'daki Parçalar",
+    "🚚 Sevk Edilenler & Ankara",
     "➕ Yeni Kayıt Ekle",
     "⚙️ Dışa Aktar",
 ])
@@ -139,17 +138,17 @@ with tab_takip:
   else:
     st.info("Henüz kayıt bulunmuyor.")
 
-# 2. ANKARA TAKİP SEKMESİ
+# 2. SEVK / ANKARA TAKİP SEKMESİ
 with tab_ankara:
-  st.subheader("🏛️ Ankara'ya Sevk Edilen Parçalar")
+  st.subheader("🚚 Sevk Edilen / Ankara'daki Parçalar")
   if not df_parcalar.empty and "durum" in df_parcalar.columns:
     df_ankara = df_parcalar[
-        df_parcalar["durum"].str.contains("ANKARA", na=False, case=False)
+        df_parcalar["durum"].str.contains("ANKARA|SEVK", na=False, case=False)
     ]
     if not df_ankara.empty:
       st.dataframe(df_ankara, use_container_width=True, hide_index=True)
     else:
-      st.success("Şu anda Ankara'da bulunan / sevk edilmiş parça yok.")
+      st.success("Şu anda sevk edilmiş veya Ankara'da bulunan parça yok.")
   else:
     st.info("Henüz kayıt bulunmuyor.")
 
@@ -165,10 +164,12 @@ with tab_ekle:
     e_p_pn = st.text_input("Parça PN")
     e_p_sn = st.text_input("Parça SN")
 
+    # Durum seçeneklerine ikonlu SEVK seçeneği eklendi
     e_durum = st.selectbox("Durum", [
         "FAAL",
         "YEDEK PARÇA",
         "ONARIMDA",
+        "SEVK 🚚",
         "ANKARA'DA / SEVK EDİLDİ",
         "GAYRI FAAL",
     ])
