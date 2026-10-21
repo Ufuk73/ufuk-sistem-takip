@@ -21,6 +21,7 @@ try:
     if not os.path.exists(folder):
       os.makedirs(folder)
 
+
   # --- TÜRKÇE BÜYÜK HARF DÖNÜŞÜMÜ ---
   def tr_upper(text):
     if not isinstance(text, str):
@@ -35,6 +36,7 @@ try:
         .replace("ç", "Ç")
         .upper()
     )
+
 
   # --- OTOMATİK EXCEL YEDEKLEME FONKSİYONU ---
   def otomatik_yedekle():
@@ -75,6 +77,7 @@ try:
     except Exception as ex:
       print(f"Otomatik Excel yedekleme hatası: {ex}")
 
+
   # --- TARİH DÖNÜŞÜM YARDIMCILARI ---
   def str_to_date(tarih_str):
     if not tarih_str or pd.isna(tarih_str):
@@ -85,6 +88,7 @@ try:
       ).date()
     except ValueError:
       return datetime.date.today()
+
 
   # --- VERİTABANI BAŞLATMA VE MIGRATION ---
   def veritabanini_hazirla():
@@ -131,6 +135,7 @@ try:
               f"ALTER TABLE parcalar ADD COLUMN {kolon_adi} {kolon_tipi}"
           )
 
+
   def log_yaz(islem_turu, detay):
     try:
       zaman = datetime.datetime.now().strftime("%d.%m.%Y %H:%M:%S")
@@ -145,6 +150,7 @@ try:
       otomatik_yedekle()
     except Exception as e:
       print(f"Log yazılamadı: {e}")
+
 
   veritabanini_hazirla()
 
@@ -323,6 +329,7 @@ try:
       ]
   )
 
+
   # Dialog ile Düzenleme Fonksiyonu
   @st.dialog("Kayıt Düzenle", width="large")
   def duzenle_dialog(r_id):
@@ -452,6 +459,7 @@ try:
           st.success("Kayıt güncellendi ve Excel yedeği alındı!")
           st.rerun()
 
+
   # Silme Onay Dialogu
   @st.dialog("Silme Onayı")
   def sil_onay_dialog(r_id, parca_adi, parca_sn):
@@ -469,6 +477,7 @@ try:
       st.rerun()
     if col_s2.button("İptal", use_container_width=True):
       st.rerun()
+
 
   # 1. SEKME: TAKİP & FİLTRELEME (KART GÖRÜNÜMÜ)
   with tab_takip:
@@ -942,48 +951,38 @@ try:
     col_yonetim1, col_yonetim2 = st.columns(2)
 
     with col_yonetim1:
-      st.markdown("##### 📤 Manuel Dışa Aktar & Yedek Al")
-      st.markdown(
-          "Mevcut parça listesini **Excel** olarak indirebilir veya"
-          " veritabanının tam **Yedeğini (.db)** alabilirsiniz."
+      st.markdown("#### 📥 Anlık Tam Yedek İndir")
+
+      with sqlite3.connect(DB_DOSYASI) as conn:
+        df_p = pd.read_sql_query("SELECT * FROM parcalar", conn)
+        df_n = pd.read_sql_query("SELECT * FROM gunluk_notlar", conn)
+        df_l = pd.read_sql_query("SELECT * FROM islem_loglari", conn)
+        df_g = pd.read_sql_query("SELECT * FROM parca_gecmis", conn)
+
+      output = io.BytesIO()
+      with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df_p.to_excel(writer, sheet_name="Parcalar", index=False)
+        df_n.to_excel(writer, sheet_name="Gunluk_Notlar", index=False)
+        df_l.to_excel(writer, sheet_name="Loglar", index=False)
+        df_g.to_excel(writer, sheet_name="Parca_Gecmisi", index=False)
+      excel_data = output.getvalue()
+
+      st.download_button(
+          label="📥 Excel Raporunu İndir (.xlsx)",
+          data=excel_data,
+          file_name=(
+              f"tam_sistem_yedek_{datetime.date.today().strftime('%d_%m_%Y')}.xlsx"
+          ),
+          mime=(
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          ),
+          use_container_width=True,
       )
 
-      if not df_parcalar.empty:
-        output = io.BytesIO()
-        with pd.ExcelWriter(output, engine="openpyxl") as writer:
-          df_parcalar.to_excel(writer, index=False, sheet_name="Veriler")
-        st.download_button(
-            "📥 Güncel Excel Raporu İndir",
-            data=output.getvalue(),
-            file_name="sistem_takip_rapor.xlsx",
-            mime=(
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            ),
-        )
-      else:
-        st.info("Dışa aktarılacak kayıt bulunmuyor.")
-
-      st.markdown("<hr style='margin:10px 0;'>", unsafe_allow_html=True)
-
-      # --- VERİTABANI YEDEĞİ İNDİR ---
-      if os.path.exists(DB_DOSYASI):
-        with open(DB_DOSYASI, "rb") as db_file:
-          st.download_button(
-              "💾 Veritabanı Yedeği İndir (.db)",
-              data=db_file,
-              file_name=(
-                  "sistem_takip_yedek_"
-                  f"{datetime.date.today().strftime('%d_%m_%Y')}.db"
-              ),
-              mime="application/x-sqlite3",
-              help="Veritabanının tam kopyasını indirir.",
-          )
-
-      # --- OTOMATİK EXCEL YEDEKLERİNİ LİSTELE / İNDİR ---
-      st.markdown("<hr style='margin:10px 0;'>", unsafe_allow_html=True)
-      st.markdown("##### 🟢 Otomatik Alınan Son Excel Yedekleri")
+    with col_yonetim2:
+      st.markdown("#### 🕒 Otomatik Alınan Son Yedekler")
       if os.path.exists(AUTOSAVE_FOLDER):
-        oto_yedek_listesi = sorted(
+        yedekler_listesi = sorted(
             [
                 f
                 for f in os.listdir(AUTOSAVE_FOLDER)
@@ -991,205 +990,26 @@ try:
             ],
             reverse=True,
         )
-        if oto_yedek_listesi:
-          secilen_oto_yedek = st.selectbox(
-              "Excel Yedek Seçin", oto_yedek_listesi[:10]
+
+        if yedekler_listesi:
+          secilen_yedek = st.selectbox(
+              "Geçmiş Yedek Seç", yedekler_listesi[:10]
           )
-          y_path = os.path.join(AUTOSAVE_FOLDER, secilen_oto_yedek)
-          with open(y_path, "rb") as y_file:
-            st.download_button(
-                f"📥 Otomatik Excel Yedeğini İndir ({secilen_oto_yedek})",
-                data=y_file,
-                file_name=secilen_oto_yedek,
-                mime=(
-                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                ),
-            )
+          yedek_tam_yol = os.path.join(AUTOSAVE_FOLDER, secilen_yedek)
+          if os.path.exists(yedek_tam_yol):
+            with open(yedek_tam_yol, "rb") as y_file:
+              st.download_button(
+                  label=f"📥 Seçilen Yedeği İndir ({secilen_yedek})",
+                  data=y_file,
+                  file_name=secilen_yedek,
+                  mime=(
+                      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                  ),
+                  use_container_width=True,
+              )
         else:
-          st.caption("Henüz otomatik Excel yedeği oluşturulmadı.")
+          st.info("Henüz otomatik yedek bulunmuyor.")
 
-    with col_yonetim2:
-      st.markdown("##### 📥 İçe Aktar & Geri Yükle")
-
-      tab_ice_excel, tab_ice_excel_restore = st.tabs([
-          "Excel / CSV Ekle (Araya Ekle)",
-          "Excel Yedeğinden Geri Yükle (Üzerine Yaz)",
-      ])
-
-      # 1. ALT SEKME: Sadece Veri Ekleme (Mevcut Verilerin Altına Ekler)
-      with tab_ice_excel:
-        yuklenen_excel = st.file_uploader(
-            "Excel / CSV Dosyası Seç",
-            type=["xlsx", "xls", "csv"],
-            key="excel_ice_aktarim",
-        )
-        if yuklenen_excel is not None:
-          if st.button("Verileri Mevcut Listeye Ekle", type="primary"):
-            try:
-              if yuklenen_excel.name.endswith(".csv"):
-                df_gelen = pd.read_csv(yuklenen_excel)
-              else:
-                df_gelen = pd.read_excel(yuklenen_excel)
-
-              if "id" in df_gelen.columns:
-                df_gelen = df_gelen.drop(columns=["id"])
-
-              eklenen_sayisi = 0
-              with sqlite3.connect(DB_DOSYASI) as conn:
-                cursor = conn.cursor()
-                for _, row in df_gelen.iterrows():
-                  bolge = tr_upper(row.get("bolge", ""))
-                  sistem_adi = tr_upper(row.get("sistem_adi", ""))
-                  sistem_pn = tr_upper(row.get("sistem_pn", ""))
-                  sistem_sn = tr_upper(row.get("sistem_sn", ""))
-                  parca_adi = tr_upper(row.get("parca_adi", ""))
-                  parca_pn = tr_upper(row.get("parca_pn", ""))
-                  parca_sn = tr_upper(row.get("parca_sn", ""))
-                  durum = str(row.get("durum", "FAAL")).strip()
-                  if durum not in [
-                      "FAAL",
-                      "YEDEK PARÇA",
-                      "ONARIMDA",
-                      "GAYRI FAAL",
-                  ]:
-                    durum = "FAAL"
-
-                  o_tar = row.get("onarim_tarih")
-                  onarim_tarih = (
-                      str(o_tar).strip()
-                      if pd.notna(o_tar)
-                      else datetime.date.today().strftime("%d.%m.%Y")
-                  )
-
-                  aciklama = tr_upper(
-                      row.get("aciklama", "")
-                      if pd.notna(row.get("aciklama"))
-                      else ""
-                  )
-                  dosya_adi = (
-                      str(row.get("dosya_adi", "")).strip()
-                      if pd.notna(row.get("dosya_adi"))
-                      else None
-                  )
-
-                  cursor.execute(
-                      """
-                                        INSERT INTO parcalar (bolge, sistem_adi, sistem_pn, sistem_sn, parca_adi, parca_pn, parca_sn, durum, onarim_tarih, aciklama, dosya_adi)
-                                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                                    """,
-                      (
-                          bolge,
-                          sistem_adi,
-                          sistem_pn,
-                          sistem_sn,
-                          parca_adi,
-                          parca_pn,
-                          parca_sn,
-                          durum,
-                          onarim_tarih,
-                          aciklama,
-                          dosya_adi,
-                      ),
-                  )
-
-                  cursor.execute(
-                      "INSERT INTO parca_gecmis (parca_sn, tarih, islem,"
-                      " aciklama) VALUES (?, ?, ?, ?)",
-                      (
-                          parca_sn,
-                          datetime.datetime.now().strftime("%d.%m.%Y %H:%M"),
-                          f"İÇE AKTARILDI ({durum})",
-                          aciklama,
-                      ),
-                  )
-                  eklenen_sayisi += 1
-
-              log_yaz(
-                  "İÇE AKTARMA",
-                  f"Excel/CSV ile {eklenen_sayisi} kayıt eklendi.",
-              )
-              st.success(
-                  f"{eklenen_sayisi} adet kayıt başarıyla eklendi ve otomatik"
-                  " Excel yedeği alındı!"
-              )
-              st.rerun()
-            except Exception as ex:
-              st.error(f"Aktarım sırasında bir hata oluştu: {ex}")
-
-      # 2. ALT SEKME: Excel Yedeğinden Veritabanını Tam Olarak Geri Yükleme (Üzerine Yazar)
-      with tab_ice_excel_restore:
-        st.caption(
-            "Yüklediğiniz Excel yedeğindeki veriler mevcut veritabanındaki"
-            " verilerin **üzerine yazılacaktır**."
-        )
-        uploaded_excel_backup = st.file_uploader(
-            "Excel Yedek Dosyası Seç (.xlsx / .xls)",
-            type=["xlsx", "xls"],
-            key="excel_yedek_geri_yukle",
-        )
-
-        if uploaded_excel_backup is not None:
-          st.warning(
-              "⚠️ **DİKKAT:** Bu işlem mevcut veritabanınızı sıfırlayacak ve"
-              " yüklediğiniz Excel dosyasındaki verileri yükleyecektir. Devam"
-              " etmek istiyor musunuz?"
-          )
-          if st.button(
-              "Excel Yedeğini Veritabanına Geri Yükle", type="primary"
-          ):
-            try:
-              excel_file = pd.ExcelFile(uploaded_excel_backup)
-              sheet_names = excel_file.sheet_names
-
-              with sqlite3.connect(DB_DOSYASI) as conn:
-                cursor = conn.cursor()
-
-                # Parçalar Tablosunu Yenile
-                if "Parcalar" in sheet_names:
-                  df_p = pd.read_excel(excel_file, sheet_name="Parcalar")
-                  cursor.execute("DELETE FROM parcalar")
-                  df_p.to_sql("parcalar", conn, if_exists="append", index=False)
-                elif len(sheet_names) > 0:
-                  df_p = pd.read_excel(excel_file, sheet_name=sheet_names[0])
-                  cursor.execute("DELETE FROM parcalar")
-                  df_p.to_sql("parcalar", conn, if_exists="append", index=False)
-
-                # Günlük Notlar Tablosunu Yenile
-                if "Gunluk_Notlar" in sheet_names:
-                  df_n = pd.read_excel(excel_file, sheet_name="Gunluk_Notlar")
-                  cursor.execute("DELETE FROM gunluk_notlar")
-                  df_n.to_sql(
-                      "gunluk_notlar", conn, if_exists="append", index=False
-                  )
-
-                # Loglar Tablosunu Yenile
-                if "Loglar" in sheet_names:
-                  df_l = pd.read_excel(excel_file, sheet_name="Loglar")
-                  cursor.execute("DELETE FROM islem_loglari")
-                  df_l.to_sql(
-                      "islem_loglari", conn, if_exists="append", index=False
-                  )
-
-                # Parça Geçmişi Tablosunu Yenile
-                if "Parca_Gecmisi" in sheet_names:
-                  df_g = pd.read_excel(excel_file, sheet_name="Parca_Gecmisi")
-                  cursor.execute("DELETE FROM parca_gecmis")
-                  df_g.to_sql(
-                      "parca_gecmis", conn, if_exists="append", index=False
-                  )
-
-              log_yaz(
-                  "EXCEL YEDEK GERİ YÜKLEME",
-                  "Veritabanı Excel yedeğinden başarıyla geri yüklendi.",
-              )
-              st.success(
-                  "Veritabanı Excel yedeği ile başarıyla güncellendi! Sayfa"
-                  " yenileniyor..."
-              )
-              st.rerun()
-            except Exception as ex:
-              st.error(f"Geri yükleme sırasında hata oluştu: {ex}")
-
-except Exception as e:
-  st.error("Uygulama çalışırken beklenmeyen bir hata oluştu:")
+except Exception as err:
+  st.error(f"Uygulama çalışırken beklenmeyen bir hata oluştu: {err}")
   st.code(traceback.format_exc())
