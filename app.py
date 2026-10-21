@@ -53,7 +53,7 @@ def verileri_getir():
         "parca_sn",
         "durum",
         "onarim_tarih",
-        "aciklama",
+        "notlar",
     ])
 
 
@@ -65,7 +65,7 @@ st.title("⚙️ Sistem ve Parça Takip Sistemi")
 if not df_parcalar.empty and "durum" in df_parcalar.columns:
   df_parcalar["durum"] = df_parcalar["durum"].astype(str).str.upper()
 
-# Temel Metrik İstatistikleri
+# Metrik İstatistikleri
 toplam = len(df_parcalar)
 faal = (
     len(df_parcalar[df_parcalar["durum"] == "FAAL"])
@@ -98,7 +98,7 @@ col5.metric("Gayri Faal", gayri)
 
 st.markdown("---")
 
-# Net ve Sade Sekmeler (Ankara kargaşası kaldırıldı)
+# Sekmeler
 tab_takip, tab_ekle, tab_yonetim = st.tabs([
     "📋 Tüm Liste & Arama",
     "➕ Yeni Kayıt Ekle",
@@ -136,7 +136,6 @@ with tab_ekle:
     e_p_pn = st.text_input("Parça PN")
     e_p_sn = st.text_input("Parça SN")
 
-    # Standart ve temiz durum seçenekleri
     e_durum = st.selectbox(
         "Durum", ["FAAL", "YEDEK PARÇA", "ONARIMDA", "GAYRI FAAL"]
     )
@@ -145,7 +144,7 @@ with tab_ekle:
         "Onarım / İşlem Tarihi (GG.AA.YYYY)",
         value=datetime.datetime.now().strftime("%d.%m.%Y"),
     )
-    e_aciklama = st.text_area("Açıklama / Notlar")
+    e_notlar = st.text_area("Notlar")
 
     submit_yeni = st.form_submit_button("Sisteme Kaydet")
 
@@ -172,7 +171,7 @@ with tab_ekle:
             "parca_sn": tr_upper(e_p_sn),
             "durum": e_durum,
             "onarim_tarih": e_tarih,
-            "aciklama": tr_upper(e_aciklama),
+            "notlar": tr_upper(e_notlar),
         }
 
         try:
