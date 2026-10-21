@@ -91,21 +91,16 @@ try:
     with sqlite3.connect(DB_DOSYASI) as conn:
       cursor = conn.cursor()
       cursor.execute(
-          "CREATE TABLE IF NOT EXISTS parcalar (id INTEGER PRIMARY KEY"
-          " AUTOINCREMENT)"
+          "CREATE TABLE IF NOT EXISTS parcalar (id INTEGER PRIMARY KEY AUTOINCREMENT)"
       )
       cursor.execute(
-          "CREATE TABLE IF NOT EXISTS islem_loglari (id INTEGER PRIMARY KEY"
-          " AUTOINCREMENT, zaman TEXT, islem_turu TEXT, detay TEXT)"
+          "CREATE TABLE IF NOT EXISTS islem_loglari (id INTEGER PRIMARY KEY AUTOINCREMENT, zaman TEXT, islem_turu TEXT, detay TEXT)"
       )
       cursor.execute(
-          "CREATE TABLE IF NOT EXISTS gunluk_notlar (id INTEGER PRIMARY KEY"
-          " AUTOINCREMENT, tarih TEXT, bolge TEXT, detay TEXT)"
+          "CREATE TABLE IF NOT EXISTS gunluk_notlar (id INTEGER PRIMARY KEY AUTOINCREMENT, tarih TEXT, bolge TEXT, detay TEXT)"
       )
       cursor.execute(
-          "CREATE TABLE IF NOT EXISTS parca_gecmis (id INTEGER PRIMARY KEY"
-          " AUTOINCREMENT, parca_sn TEXT, tarih TEXT, islem TEXT, aciklama"
-          " TEXT)"
+          "CREATE TABLE IF NOT EXISTS parca_gecmis (id INTEGER PRIMARY KEY AUTOINCREMENT, parca_sn TEXT, tarih TEXT, islem TEXT, aciklama TEXT)"
       )
 
       beklenen_kolonlar = {
@@ -137,8 +132,7 @@ try:
       with sqlite3.connect(DB_DOSYASI) as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO islem_loglari (zaman, islem_turu, detay) VALUES (?,"
-            " ?, ?)",
+            "INSERT INTO islem_loglari (zaman, islem_turu, detay) VALUES (?, ?, ?)",
             (zaman, islem_turu, detay),
         )
       otomatik_yedekle()
@@ -194,8 +188,7 @@ try:
     st.markdown("### ⚙️ Sistem ve Parça Takip Sistemi")
   with col_head2:
     st.markdown(
-        "<div style='text-align: right; padding-top: 10px;'><span"
-        ' class="autosave-badge">🟢 Otomatik Excel Yedekleme Aktif</span></div>',
+        "<div style='text-align: right; padding-top: 10px;'><span class='autosave-badge'>🟢 Otomatik Excel Yedekleme Aktif</span></div>",
         unsafe_allow_html=True,
     )
 
@@ -246,17 +239,14 @@ try:
           if gecen_gun >= 30:
             kritik += 1
             kritik_liste.append(
-                f"• **Bölge: {row.get('bolge', 'Bölge Yok')}**"
-                f" ({row.get('parca_adi', 'Parça')} - SN:"
-                f" {row.get('parca_sn', '-')}) -> {gecen_gun} gündür onarımda!"
+                f"• **Bölge: {row.get('bolge', 'Bölge Yok')}** ({row.get('parca_adi', 'Parça')} - SN: {row.get('parca_sn', '-')}) -> {gecen_gun} gündür onarımda!"
             )
         except ValueError:
           pass
 
   if kritik > 0:
     st.error(
-        f"⚠️ **DİKKAT:** 30 Günü Aşan Onarımda Bekleyen **{kritik}** Adet Parça"
-        " Bulunuyor!"
+        f"⚠️ **DİKKAT:** 30 Günü Aşan Onarımda Bekleyen **{kritik}** Adet Parça Bulunuyor!"
     )
     with st.expander("Kritik Parçaları Listele", expanded=False):
       for k_bilgi in kritik_liste:
@@ -267,38 +257,38 @@ try:
 
   with c1:
     st.markdown(
-        '<div class="metric-card"><div'
-        ' class="metric-title">Toplam</div><div'
-        f' class="metric-value">{toplam}</div></div>',
+        f'<div class="metric-card"><div class="metric-title">Toplam</div><div class="metric-value">{toplam}</div></div>',
         unsafe_allow_html=True,
     )
   with c2:
     st.markdown(
-        '<div class="metric-card"><div class="metric-title">Faal</div><div'
-        f' class="metric-value" style="color: #2ecc71;">{faal}</div></div>',
+        f'<div class="metric-card"><div class="metric-title">Faal</div><div class="metric-value" style="color: #2ecc71;">{faal}</div></div>',
         unsafe_allow_html=True,
     )
   with c3:
     st.markdown(
-        '<div class="metric-card"><div class="metric-title">Yedek</div><div'
-        f' class="metric-value" style="color: #3498db;">{yedek}</div></div>',
+        f'<div class="metric-card"><div class="metric-title">Yedek</div><div class="metric-value" style="color: #3498db;">{yedek}</div></div>',
         unsafe_allow_html=True,
     )
   with c4:
     st.markdown(
-        '<div class="metric-card"><div'
-        ' class="metric-title">Onarımda</div><div class="metric-value"'
-        f' style="color: #f1c40f;">{onarimda}</div></div>',
+        f'<div class="metric-card"><div class="metric-title">Onarımda</div><div class="metric-value" style="color: #f1c40f;">{onarimda}</div></div>',
         unsafe_allow_html=True,
     )
   with c5:
     st.markdown(
-        '<div class="metric-card"><div class="metric-title">Kritik'
-        ' (30+)</div><div class="metric-value" style="color:'
-        f' #e74c3c;">{kritik}</div></div>',
+        f'<div class="metric-card"><div class="metric-title">Kritik (30+)</div><div class="metric-value" style="color: #e74c3c;">{kritik}</div></div>',
         unsafe_allow_html=True,
     )
   with c6:
     st.markdown(
-        '<div class="metric-card"><div class="metric-title">Gayri'
-        ' Faal</div><div class="metric-value"
+        f'<div class="metric-card"><div class="metric-title">Gayri Faal</div><div class="metric-value" style="color: #95a5a6;">{gayri}</div></div>',
+        unsafe_allow_html=True,
+    )
+
+  st.markdown(
+      "<hr style='margin:15px 0 10px 0; border-color: #333333;'>",
+      unsafe_allow_html=True,
+  )
+
+  tab_takip, tab_ekle, tab_notlar, tab_loglar, tab_gecmis, tab_yonetim = st.tabs(
