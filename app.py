@@ -1,5 +1,9 @@
+from io import BytesIO
+import re
+import datetime
+import pandas as pd
 import streamlit as st
-import traceback
+from streamlit_gsheets import GSheetsConnection
 
 # Sayfa Yapılandırması en başta olmalı
 st.set_page_config(
@@ -9,12 +13,8 @@ st.set_page_config(
 )
 
 try:
-    import sqlite3
-    import datetime
-    import pandas as pd
-    import os
-
-    DB_DOSYASI = "sistem_takip.db"
+    # Google Sheets Bağlantısı
+    conn = st.connection("gsheets", type=GSheetsConnection)
 
     # --- TÜRKÇE BÜYÜK HARF DÖNÜŞÜMÜ ---
     def tr_upper(text):
@@ -31,78 +31,27 @@ try:
             .upper()
         )
 
-    # --- VERİTABANI BAŞLATMA VE GELİŞMİŞ GÜNCELLEME (MIGRATION) ---
-    def veritabanini_hazirla():
-        conn = sqlite3.connect(DB_DOSYASI)
-        cursor = conn.cursor()
-        
-        # 1. Tablolar yoksa temel yapıyla oluştur
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS parcalar (
-                id INTEGER PRIMARY KEY AUTOINCREMENT
-            )
-        """)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS islem_loglari (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                zaman TEXT,
-                islem_turu TEXT,
-                detay TEXT
-            )
-        """)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS gunluk_notlar (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                tarih TEXT,
-                bolge TEXT,
-                detay TEXT
-            )
-        """)
-        
-        # 2. 'parcalar' tablosunda olması gereken tüm sütunları tek tek kontrol et, yoksa ekle
-        beklenen_kolonlar = {
-            "bolge": "TEXT",
-            "sistem_adi": "TEXT",
-            "sistem_pn": "TEXT",
-            "sistem_sn": "TEXT",
-            "parca_adi": "TEXT",
-            "parca_pn": "TEXT",
-            "parca_sn": "TEXT",
-            "durum": "TEXT",
-            "onarim_tarih": "TEXT",
-            "aciklama": "TEXT"
-        }
-        
-        cursor.execute("PRAGMA table_info(parcalar)")
-        mevcut_kolonlar = [kol[1] for kol in cursor.fetchall()]
-        
-        for kolon_adi, kolon_tipi in beklenen_kolonlar.items():
-            if kolon_adi not in mevcut_kolonlar:
-                cursor.execute(f"ALTER TABLE parcalar ADD COLUMN {kolon_adi} {kolon_tipi}")
-            
-        conn.commit()
-        conn.close()
-
-    def log_yaz(islem_turu, detay):
+    # Verileri Google Sheets'ten Çekme Fonksiyonu
+    @st.cache_data(ttl=0)
+    def verileri_getir():
         try:
-            zaman = datetime.datetime.now().strftime("%d.%m.%Y %H:%M:%S")
-            conn = sqlite3.connect(DB_DOSYASI)
-            cursor = conn.cursor()
-            cursor.execute("INSERT INTO islem_loglari (zaman, islem_turu, detay) VALUES (?, ?, ?)", (zaman, islem_turu, detay))
-            conn.commit()
-            conn.close()
-        except Exception as e:
-            print(f"Log yazılamadı: {e}")
+            df = conn.read(worksheet="parcalar", ttl=0)
+            if df.empty or "id" not in df.columns:
+                return pd.DataFrame(columns=[
+                    "id", "bolge", "sistem_adi", "sistem_pn", "sistem_sn", 
+                    "parca_adi", "parca_pn", "parca_sn", "durum", "onarim_tarih", "aciklama"
+                ])
+            return df
+        except Exception:
+            return pd.DataFrame(columns=[
+                "id", "bolge", "sistem_adi", "sistem_pn", "sistem_sn", 
+                "parca_adi", "parca_pn", "parca_sn", "durum", "onarim_tarih", "aciklama"
+            ])
 
-    veritabanini_hazirla()
+    df_parcalar = verileri_getir()
 
     # --- ANA BAŞLIK VE İSTATİSTİKLER ---
-    st.title("⚙️ Sistem ve Parça Takip Sistemi")
-
-    # Verileri Çek
-    conn = sqlite3.connect(DB_DOSYASI)
-    df_parcalar = pd.read_sql_query("SELECT * FROM parcalar", conn)
-    conn.close()
+    st.title("⚙️ Sistem ve Parça Takip Sistemi (Bulut & Mobil)")
 
     # İstatistik Hesaplama
     toplam = len(df_parcalar)
@@ -117,7 +66,7 @@ try:
         bugun = datetime.date.today()
         for _, row in df_parcalar[df_parcalar["durum"] == "ONARIMDA"].iterrows():
             o_tarih = row["onarim_tarih"]
-            if o_tarih:
+            if o_tarih and pd.notna(o_tarih):
                 try:
                     baslangic = datetime.datetime.strptime(str(o_tarih).strip(), "%d.%m.%Y").date()
                     if (bugun - baslangic).days >= 30:
@@ -137,11 +86,9 @@ try:
     st.markdown("---")
 
     # --- SEKMELER ---
-    tab_takip, tab_ekle, tab_notlar, tab_loglar, tab_yonetim = st.tabs([
+    tab_takip, tab_ekle, tab_yonetim = st.tabs([
         "📋 Sistem Takip & Filtreleme", 
         "➕ Yeni Kayıt Ekle", 
-        "📝 Günlük Notlar", 
-        "📜 Sistem Logları", 
         "⚙️ Dışa/İçe Aktar"
     ])
 
@@ -173,7 +120,7 @@ try:
                 kritik_idler = []
                 bugun = datetime.date.today()
                 for _, r in filt_df[filt_df["durum"] == "ONARIMDA"].iterrows():
-                    if r["onarim_tarih"]:
+                    if pd.notna(r["onarim_tarih"]):
                         try:
                             b_t = datetime.datetime.strptime(str(r["onarim_tarih"]).strip(), "%d.%m.%Y").date()
                             if (bugun - b_t).days >= 30:
@@ -192,51 +139,45 @@ try:
             st.markdown("### Kayıt Düzenle veya Sil")
             secili_id = st.selectbox("İşlem Yapılacak Kayıt ID Seç", [None] + list(filt_df["id"].values))
             
-            if secili_id:
-                kayit = df_parcalar[df_parcalar["id"] == secili_id].iloc[0]
-                with st.form("guncelle_form"):
-                    g_bolge = st.text_input("Bölge", value=kayit.get("bolge", "") if pd.notna(kayit.get("bolge", "")) else "")
-                    g_sistem = st.text_input("Sistem Adı", value=kayit.get("sistem_adi", "") if pd.notna(kayit.get("sistem_adi", "")) else "")
-                    g_s_pn = st.text_input("Sistem PN", value=kayit.get("sistem_pn", "") if pd.notna(kayit.get("sistem_pn", "")) else "")
-                    g_s_sn = st.text_input("Sistem SN", value=kayit.get("sistem_sn", "") if pd.notna(kayit.get("sistem_sn", "")) else "")
-                    g_parca = st.text_input("Parça Adı", value=kayit.get("parca_adi", "") if pd.notna(kayit.get("parca_adi", "")) else "")
-                    g_p_pn = st.text_input("Parça PN", value=kayit.get("parca_pn", "") if pd.notna(kayit.get("parca_pn", "")) else "")
-                    g_p_sn = st.text_input("Parça SN", value=kayit.get("parca_sn", "") if pd.notna(kayit.get("parca_sn", "")) else "")
-                    
-                    mevcut_durum = kayit.get("durum", "FAAL")
-                    if pd.isna(mevcut_durum) or mevcut_durum not in ["FAAL", "YEDEK PARÇA", "ONARIMDA", "GAYRI FAAL"]:
-                        mevcut_durum = "FAAL"
-                    g_durum = st.selectbox("Durum", ["FAAL", "YEDEK PARÇA", "ONARIMDA", "GAYRI FAAL"], index=["FAAL", "YEDEK PARÇA", "ONARIMDA", "GAYRI FAAL"].index(mevcut_durum))
-                    
-                    g_tarih = st.text_input("Onarım Tarihi (GG.AA.YYYY)", value=kayit.get("onarim_tarih", "") if pd.notna(kayit.get("onarim_tarih", "")) else "")
-                    g_aciklama = st.text_area("Açıklama / Not", value=kayit.get("aciklama", "") if pd.notna(kayit.get("aciklama", "")) else "")
-                    
-                    col_btn1, col_btn2 = st.columns(2)
-                    guncelle_basildi = col_btn1.form_submit_button("Değişiklikleri Kaydet")
-                    sil_basildi = col_btn2.form_submit_button("Kayıt Sil", type="primary")
-                    
-                    if guncelle_basildi:
-                        conn = sqlite3.connect(DB_DOSYASI)
-                        cursor = conn.cursor()
-                        cursor.execute("""
-                            UPDATE parcalar SET bolge=?, sistem_adi=?, sistem_pn=?, sistem_sn=?, parca_adi=?, parca_pn=?, parca_sn=?, durum=?, onarim_tarih=?, aciklama=?
-                            WHERE id=?
-                        """, (tr_upper(g_bolge), tr_upper(g_sistem), tr_upper(g_s_pn), tr_upper(g_s_sn), tr_upper(g_parca), tr_upper(g_p_pn), tr_upper(g_p_sn), g_durum, g_tarih, tr_upper(g_aciklama), secili_id))
-                        conn.commit()
-                        conn.close()
-                        log_yaz("GÜNCELLEME", f"ID {secili_id} güncellendi.")
-                        st.success("Kayıt başarıyla güncellendi!")
-                        st.rerun()
+            if secili_id is not None:
+                kayit_secim = df_parcalar[df_parcalar["id"] == secili_id]
+                if not kayit_secim.empty:
+                    kayit = kayit_secim.iloc[0]
+                    with st.form("guncelle_form"):
+                        g_bolge = st.text_input("Bölge", value=kayit.get("bolge", "") if pd.notna(kayit.get("bolge", "")) else "")
+                        g_sistem = st.text_input("Sistem Adı", value=kayit.get("sistem_adi", "") if pd.notna(kayit.get("sistem_adi", "")) else "")
+                        g_s_pn = st.text_input("Sistem PN", value=kayit.get("sistem_pn", "") if pd.notna(kayit.get("sistem_pn", "")) else "")
+                        g_s_sn = st.text_input("Sistem SN", value=kayit.get("sistem_sn", "") if pd.notna(kayit.get("sistem_sn", "")) else "")
+                        g_parca = st.text_input("Parça Adı", value=kayit.get("parca_adi", "") if pd.notna(kayit.get("parca_adi", "")) else "")
+                        g_p_pn = st.text_input("Parça PN", value=kayit.get("parca_pn", "") if pd.notna(kayit.get("parca_pn", "")) else "")
+                        g_p_sn = st.text_input("Parça SN", value=kayit.get("parca_sn", "") if pd.notna(kayit.get("parca_sn", "")) else "")
                         
-                    if sil_basildi:
-                        conn = sqlite3.connect(DB_DOSYASI)
-                        cursor = conn.cursor()
-                        cursor.execute("DELETE FROM parcalar WHERE id=?", (secili_id,))
-                        conn.commit()
-                        conn.close()
-                        log_yaz("SİLME", f"ID {secili_id} silindi.")
-                        st.success("Kayıt silindi!")
-                        st.rerun()
+                        mevcut_durum = kayit.get("durum", "FAAL")
+                        durum_secenekleri = ["FAAL", "YEDEK PARÇA", "ONARIMDA", "GAYRI FAAL"]
+                        durum_index = durum_secenekleri.index(mevcut_durum) if mevcut_durum in durum_secenekleri else 0
+                        g_durum = st.selectbox("Durum", durum_secenekleri, index=durum_index)
+                        
+                        g_tarih = st.text_input("Onarım Tarihi (GG.AA.YYYY)", value=kayit.get("onarim_tarih", "") if pd.notna(kayit.get("onarim_tarih", "")) else "")
+                        g_aciklama = st.text_area("Açıklama / Not", value=kayit.get("aciklama", "") if pd.notna(kayit.get("aciklama", "")) else "")
+                        
+                        col_btn1, col_btn2 = st.columns(2)
+                        guncelle_basildi = col_btn1.form_submit_button("Değişiklikleri Kaydet")
+                        sil_basildi = col_btn2.form_submit_button("Kayıt Sil", type="primary")
+                        
+                        if guncelle_basildi:
+                            df_parcalar.loc[df_parcalar["id"] == secili_id, ["bolge", "sistem_adi", "sistem_pn", "sistem_sn", "parca_adi", "parca_pn", "parca_sn", "durum", "onarim_tarih", "aciklama"]] = [
+                                tr_upper(g_bolge), tr_upper(g_sistem), tr_upper(g_s_pn), tr_upper(g_s_sn), 
+                                tr_upper(g_parca), tr_upper(g_p_pn), tr_upper(g_p_sn), g_durum, g_tarih, tr_upper(g_aciklama)
+                            ]
+                            conn.update(worksheet="parcalar", data=df_parcalar)
+                            st.success("Kayıt başarıyla güncellendi!")
+                            st.rerun()
+                            
+                        if sil_basildi:
+                            df_parcalar = df_parcalar[df_parcalar["id"] != secili_id]
+                            conn.update(worksheet="parcalar", data=df_parcalar)
+                            st.success("Kayıt silindi!")
+                            st.rerun()
         else:
             st.info("Henüz kayıt bulunmuyor.")
 
@@ -260,88 +201,58 @@ try:
                 if not e_bolge or not e_sistem or not e_parca:
                     st.warning("Lütfen Bölge, Sistem Adı ve Parça Adı alanlarını doldurun!")
                 else:
-                    conn = sqlite3.connect(DB_DOSYASI)
-                    cursor = conn.cursor()
-                    cursor.execute("""
-                        INSERT INTO parcalar (bolge, sistem_adi, sistem_pn, sistem_sn, parca_adi, parca_pn, parca_sn, durum, onarim_tarih, aciklama)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (tr_upper(e_bolge), tr_upper(e_sistem), tr_upper(e_s_pn), tr_upper(e_s_sn), tr_upper(e_parca), tr_upper(e_p_pn), tr_upper(e_p_sn), e_durum, e_tarih, tr_upper(e_aciklama)))
-                    conn.commit()
-                    conn.close()
-                    log_yaz("YENİ KAYIT", f"Bölge: {e_bolge}, Sistem: {e_sistem}, Parça: {e_parca} eklendi.")
-                    st.success("Yeni parça başarıyla eklendi!")
-                    st.rerun()
-
-    # 3. SEKME: GÜNLÜK NOTLAR
-    with tab_notlar:
-        st.subheader("Günlük İş Notları ve Arşiv")
-        with st.form("not_form", clear_on_submit=True):
-            n_tarih = st.text_input("Tarih", value=datetime.datetime.now().strftime("%d.%m.%Y"))
-            n_bolge = st.text_input("Bölge / Konum")
-            n_detay = st.text_area("İş / Not Detayı")
-            not_kaydet = st.form_submit_button("Notu Ekle")
-            
-            if not_kaydet:
-                if not n_bolge or not n_detay:
-                    st.warning("Bölge ve Not Detayı zorunludur!")
-                else:
-                    conn = sqlite3.connect(DB_DOSYASI)
-                    cursor = conn.cursor()
-                    cursor.execute("INSERT INTO gunluk_notlar (tarih, bolge, detay) VALUES (?, ?, ?)", (n_tarih, tr_upper(n_bolge), tr_upper(n_detay)))
-                    conn.commit()
-                    conn.close()
-                    log_yaz("NOT EKLE", f"Bölge {n_bolge} için günlük not eklendi.")
-                    st.success("Not eklendi!")
-                    st.rerun()
+                    yeni_id = int(df_parcalar["id"].max() + 1) if not df_parcalar.empty and "id" in df_parcalar.columns and pd.notna(df_parcalar["id"]).any() else 1
                     
-        st.markdown("### Kayıtlı Notlar")
-        conn = sqlite3.connect(DB_DOSYASI)
-        df_notlar = pd.read_sql_query("SELECT * FROM gunluk_notlar ORDER BY id DESC", conn)
-        conn.close()
-        if not df_notlar.empty:
-            st.dataframe(df_notlar, use_container_width=True, hide_index=True)
-        else:
-            st.info("Kayıtlı günlük not bulunmuyor.")
+                    yeni_veri = {
+                        "id": yeni_id,
+                        "bolge": tr_upper(e_bolge),
+                        "sistem_adi": tr_upper(e_sistem),
+                        "sistem_pn": tr_upper(e_s_pn),
+                        "sistem_sn": tr_upper(e_s_sn),
+                        "parca_adi": tr_upper(e_parca),
+                        "parca_pn": tr_upper(e_p_pn),
+                        "parca_sn": tr_upper(e_p_sn),
+                        "durum": e_durum,
+                        "onarim_tarih": e_tarih,
+                        "aciklama": tr_upper(e_aciklama)
+                    }
+                    
+                    updated_df = pd.concat([df_parcalar, pd.DataFrame([yeni_veri])], ignore_index=True)
+                    conn.update(worksheet="parcalar", data=updated_df)
+                    st.success("Yeni parça başarıyla buluta eklendi ve asla silinmeyecek!")
+                    st.rerun()
 
-    # 4. SEKME: LOGLAR
-    with tab_loglar:
-        st.subheader("Sistem İşlem Geçmişi (Loglar)")
-        conn = sqlite3.connect(DB_DOSYASI)
-        df_loglar = pd.read_sql_query("SELECT * FROM islem_loglari ORDER BY id DESC", conn)
-        conn.close()
-        if not df_loglar.empty:
-            st.dataframe(df_loglar, use_container_width=True, hide_index=True)
-        else:
-            st.info("Log kaydı bulunmuyor.")
-
-    # 5. SEKME: DIŞA / İÇE AKTAR
+    # 3. SEKME: DIŞA / İÇE AKTAR
     with tab_yonetim:
         st.subheader("Veri Yönetimi (Dışa / İçe Aktar)")
         
-        # Dışa Aktar
         if not df_parcalar.empty:
-            csv_data = df_parcalar.to_csv(index=False, sep=";", encoding="utf-8-sig").encode("utf-8-sig")
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine="openpyxl") as writer:
+                df_parcalar.to_excel(writer, index=False, sheet_name="parcalar")
+            excel_data = output.getvalue()
+            
             st.download_button(
-                label="📥 Tüm Verileri CSV Olarak İndir",
-                data=csv_data,
-                file_name=f"sistem_takip_{datetime.date.today().strftime('%d_%m_%Y')}.csv",
-                mime="text/csv"
+                label="📥 Tüm Verileri Excel Olarak İndir",
+                data=excel_data,
+                file_name=f"sistem_takip_{datetime.date.today().strftime('%d_%m_%Y')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
             
         st.markdown("---")
-        
-        # İçe Aktar (Upload)
-        st.markdown("### Toplu Veri İçe Aktar (CSV)")
-        yuklenen_dosya = st.file_uploader("CSV Dosyası Seçin (Aynı kolon yapısında olmalıdır)", type=["csv"])
+        st.markdown("### Toplu Veri İçe Aktar (Excel / CSV)")
+        yuklenen_dosya = st.file_uploader("Dosya Seçin", type=["xlsx", "csv"])
         if yuklenen_dosya is not None:
             try:
-                df_yuklenen = pd.read_csv(yuklenen_dosya, sep=";")
-                if st.button("Veritabanına Aktarımı Başlat"):
-                    conn = sqlite3.connect(DB_DOSYASI)
-                    df_yuklenen.to_sql("parcalar", conn, if_exists="append", index=False)
-                    conn.close()
-                    log_yaz("İÇE AKTAR", f"{len(df_yuklenen)} adet kayıt dışarıdan yüklendi.")
-                    st.success("Veriler başarıyla içe aktarıldı!")
+                if yuklenen_dosya.name.endswith('.csv'):
+                    df_yuklenen = pd.read_csv(yuklenen_dosya, sep=";")
+                else:
+                    df_yuklenen = pd.read_excel(yuklenen_dosya)
+                    
+                if st.button("Google Sheets'e Toplu Aktarımı Başlat"):
+                    updated_df = pd.concat([df_parcalar, df_yuklenen], ignore_index=True)
+                    conn.update(worksheet="parcalar", data=updated_df)
+                    st.success("Veriler başarıyla buluta aktarıldı!")
                     st.rerun()
             except Exception as e:
                 st.error(f"Dosya okuma hatası: {e}")
